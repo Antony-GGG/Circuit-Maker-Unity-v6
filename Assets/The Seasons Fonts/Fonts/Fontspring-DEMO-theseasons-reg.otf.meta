@@ -1,0 +1,23 @@
+fileFormatVersion: 2
+guid: 26bcc9a36e6348b4fa47f4c7186ab82e
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontNames:
+  - FONTSPRING DEMO - The Seasons
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: 63beadfc02af5594f896ec7c7f0ee9a5, type: 3}
+  - {fileID: 12800000, guid: 3553f0f01ecadc94aa8241fd16f0c26a, type: 3}
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
