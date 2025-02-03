@@ -1,3 +1,4 @@
+using GameAnalyticsSDK;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -69,6 +70,7 @@ public class Manager : MonoBehaviour
             spriteState.disabledSprite = lvlLockedIcon;
             levelButton.spriteState = spriteState;
         }
+
     }
 
     public void Update()
@@ -86,6 +88,9 @@ public class Manager : MonoBehaviour
             {
                 gameOver = true;
                 _APIManager.UpdateGameScore(playerScore, "loss", lvlIndex + 1);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (lvlIndex + 1).ToString(), "Score_", 0);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (lvlIndex + 1).ToString(), "Time_", (int)timeElapsed);
             }
         }
 
@@ -158,6 +163,10 @@ public class Manager : MonoBehaviour
         LevelNumber.text = "Level " + (lvlIndex + 1).ToString();
 
         timerIsRunning = true;
+
+        GameAnalytics.NewProgressionEvent(GAProgressionStatus.Start, "Level_" + (lvlIndex + 1).ToString());
+
+        _APIManager.StartGame();
     }
 
     public void ResetGameOver()
@@ -368,17 +377,29 @@ public class Manager : MonoBehaviour
             if (timeUsed <= timeThresholds[0])
             {
                 playerScore += score[2]; // Highest score for quickest completion
+                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
                 _APIManager.UpdateGameScore(score[2], "win", lvlIndex + 1);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[2]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
             }
             else if (timeUsed <= timeThresholds[1])
             {
                 playerScore += score[1]; // Mid score for medium speed completion
+                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
                 _APIManager.UpdateGameScore(score[1], "win", lvlIndex + 1);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[1]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
             }
             else
             {
                 playerScore += score[0]; // Lowest score for slow completion
+                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
                 _APIManager.UpdateGameScore(score[0], "win", lvlIndex + 1);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[0]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
             }
 
             if ((lvlIndex + 1) % GrandAdManager.instance.adsAfter == 0)
