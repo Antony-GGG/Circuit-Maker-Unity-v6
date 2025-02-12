@@ -12,6 +12,10 @@ public class APIManager : MonoBehaviour
     #region Instance
     public static APIManager Instance;
 
+    GameObject _GGCoinText;
+
+    [HideInInspector]public int ggCoins;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -28,9 +32,9 @@ public class APIManager : MonoBehaviour
     [SerializeField] UserDataObject userData;
 
     private int iv;
-    private int coins;
+    [SerializeField] public int coins;
     private int scorebase;
-    private int levelbase;
+    [SerializeField] public int levelbase;
 
     private int user_id;
 
@@ -44,9 +48,10 @@ public class APIManager : MonoBehaviour
         DecyrptToken(userData.Data.token);
         GameAnalytics.SetCustomId(user_id.ToString());
         GameAnalytics.Initialize();
+        ggCoins = 0;
     }
 
-    public void UpdateGameScore(int score, string winOrLoss, int level)
+    public void UpdateGameScore(int score, int coins, string winOrLoss, int level)
     {
         UpdatePoints form = new UpdatePoints();
         form.game_id = userData.Data.game_id.ToString();
@@ -130,6 +135,8 @@ public class APIManager : MonoBehaviour
     }
     public void StartGame()
     {
+        ggCoins = 0;
+
         CallGetAPI("/startgame", (val) =>
         {
             if (val == null)
@@ -183,50 +190,19 @@ public class APIManager : MonoBehaviour
         }
     }
 
-    public void coinsEarningLevelBased(double userlevel)
+    public void coinsEarningLevelBased(double userlevel, GameObject ggCoinText)
     {
         //token will be received from index page to unity
         try
         {
-            /*TextMeshProUGUI _GGCoinText = GameObject.FindGameObjectWithTag("GGCoinText").GetComponent<TextMeshProUGUI>();
-            if (_GGCoinText != null)
+            if (coins > 0 && levelbase > 0 && (userlevel % levelbase) == 0)  //if any coins to be given
             {
-                _GGCoinText.text = "You've earned 1 GG Coin";
-                Debug.Log("Worked");
-            }
-            else
-            {
-                Debug.Log("Fucked");
-            }*/
+                ggCoins += coins;
 
-            int coinsearned = 0;  //variable to store coins earned 
-
-            if (coins > 0)  //if any coins to be given
-            {
-                if (levelbase > 0)
+                if (ggCoinText != null && !ggCoinText.gameObject.activeSelf)
                 {
-
-                    if ((userlevel % levelbase) == 0)
-                    {
-                        TextMeshProUGUI _GGCoinText = GameObject.FindGameObjectWithTag("GGCoinText").GetComponent<TextMeshProUGUI>();
-
-                        _GGCoinText.text = "You've earned " + coins.ToString() + " GG Coin";
-
-                        //coinsearned = (int)((userlevel / levelbase) * coins);
-                        /*if (coinsearned > 0)
-                        {
-                            //display coins on game UI using below variables
-
-
-                            //Response.Write("Coins earned " + coins);
-                            //Response.Write("Total coins " + coinsearned);
-                        }*/
-                    }
-
-                }
-                else
-                {
-                    //coins earning is not level based for this game
+                    ggCoinText.gameObject.SetActive(true);
+                    ggCoinText.gameObject.GetComponentInChildren<TextMeshProUGUI>().text = "You've earned " + ggCoins.ToString();
                 }
             }
         }

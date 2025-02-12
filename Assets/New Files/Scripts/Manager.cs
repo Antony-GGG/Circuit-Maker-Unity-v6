@@ -6,6 +6,7 @@ using TMPro;
 using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 using Button = UnityEngine.UIElements.Button;
@@ -14,56 +15,71 @@ public class Manager : MonoBehaviour
 {
     [SerializeField] APIManager _APIManager;
 
-    public float gridPadding = 1.5f;
-    public PropScript propPrefab;
-    public List<LevelData> levelsData;
-    public LevelData lvlData;
-    public PropScript[,] props;
-    public List<PropScript> startPropsList;
-    public bool allBulbsFilled;
+    [SerializeField]private float gridPadding = 1.5f;
+    [SerializeField]private PropScript propPrefab;
+    [SerializeField]private List<LevelData> levelsData;
+    [SerializeField]private LevelData lvlData;
+    private PropScript[,] props;
+    [SerializeField]private List<PropScript> startPropsList;
+    private bool allBulbsFilled;
 
-    public Sprite lvlLockedIcon;
-    public Sprite lvlIncompleteBtn;
-    public Sprite lvlCompletedIcon;
-    public bool[] completedLevels;
-    public bool allLevelsDone = false;
-    public UnityEngine.UI.Button[] levelButtons;
-    //public Button[] levelButton;
+    [SerializeField]private Sprite lvlLockedIcon;
+    [SerializeField]private Sprite lvlIncompleteBtn;
+    [SerializeField]private Sprite lvlCompletedIcon;
+    [SerializeField]private UnityEngine.UI.Button[] levelButtons;
+    private int completedLevels;
+    private int currentLevel;
 
-    public int lvlIndex;
+    [SerializeField]private int lvlIndex;
 
-    public GameObject homeMenuCanvas;
-    public GameObject nextLevelCanvas;
-    public GameObject levelCanvas;
-    public GameObject gameOverCanvas;
-    public GameObject replayCanvas;
-    public GameObject gameCompletedCanvas;
+    [SerializeField]private GameObject homeMenuCanvas;
+    [SerializeField]private GameObject tutorialCanvas;
+    [SerializeField]private GameObject nextLevelCanvas;
+    [SerializeField]private GameObject levelCanvas;
+    [SerializeField]private GameObject gameOverCanvas;
+    [SerializeField]private GameObject replayCanvas;
+    [SerializeField]private GameObject gameCompletedCanvas;
     //public GameObject pauseMenuCanvas;
 
-    public TextMeshProUGUI LevelNumber;
+    private int ggScore;
+
+    private GameObject _GGCoinText;
+
+    [SerializeField] private TextMeshProUGUI LevelNumber;
 
     //Timer & Score Calc
-    public float TotalGameTime = 500f;
-    public float timeElapsed; // Starting time
-    public bool timerIsRunning = false;
-    public TextMeshProUGUI timerText;
-    public float[] timeThresholds = { 50f, 100f };
-    public TextMeshProUGUI[] scoreText;
-    public int playerScore;
-    public int[] score = { 100, 200, 300 };
-
-    public bool gameOver = false;
-
+    [SerializeField]private float totalGameTime = 500f;
+    private float timeElapsed; // Starting time
+    private bool timerIsRunning = false;
+    [SerializeField]private TextMeshProUGUI timerText;
+    [SerializeField]private TextMeshProUGUI[] scoreText;
+    private int playerScore;
+    private int[] score = { 100, 200, 300 };
+    private float[] timeThresholds = { 50f, 100f };
 
     private void Start()
     {
-        timeElapsed = TotalGameTime;
-        completedLevels = new bool[levelsData.Count];
-
-        for (int i = 0; i < completedLevels.Length; i++)
+        if (!PlayerPrefs.HasKey("PlayerScore"))
         {
-            completedLevels[i] = false;
+            PlayerPrefs.SetInt("PlayerScore", 00);
         }
+        if (!PlayerPrefs.HasKey("currentLevel"))
+        {
+            PlayerPrefs.SetInt("currentLevel", 1);
+
+            lvlIndex = 0;
+        }
+        if (!PlayerPrefs.HasKey("CompletedLevels"))
+        {
+            PlayerPrefs.SetInt("CompletedLevels", 0);
+        }
+
+        playerScore = PlayerPrefs.GetInt("PlayerScore");
+        currentLevel = PlayerPrefs.GetInt("currentLevel");
+        completedLevels = PlayerPrefs.GetInt("CompletedLevels");
+
+        Debug.Log("\n" + "Player Score: " + playerScore + "\n" + "Current Level: " + currentLevel + "\n" + "Completed Levels: " + completedLevels + "\n");
+
         foreach (UnityEngine.UI.Button levelButton in levelButtons)
         {
             SpriteState spriteState = levelButton.spriteState;
@@ -71,11 +87,24 @@ public class Manager : MonoBehaviour
             levelButton.spriteState = spriteState;
         }
 
+        for (int i = 0; i < completedLevels; i++)
+        {
+            levelButtons[i].image.sprite = lvlCompletedIcon;
+
+            if (levelButtons[i + 1] != null)
+            {
+                levelButtons[i + 1].interactable = true;
+
+                levelButtons[i + 1].GetComponentInChildren<Transform>().GetChild(0).gameObject.SetActive(true);
+            }
+        }
+
+        _APIManager.StartGame();
+        ggScore = 0;
     }
 
     public void Update()
     {
-
         if (timerIsRunning)
         {
             if (timeElapsed > 0f)
@@ -86,23 +115,28 @@ public class Manager : MonoBehaviour
             }
             else
             {
-                gameOver = true;
-                _APIManager.UpdateGameScore(playerScore, "loss", lvlIndex + 1);
-
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (lvlIndex + 1).ToString(), "Score_", 0);
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (lvlIndex + 1).ToString(), "Time_", (int)timeElapsed);
+                GameOver();
             }
         }
 
-        if (!nextLevelCanvas.activeInHierarchy && !homeMenuCanvas.activeInHierarchy && !levelCanvas.activeInHierarchy && !replayCanvas.activeInHierarchy && !allBulbsFilled && !gameOver)
+        if (!nextLevelCanvas.activeInHierarchy && !tutorialCanvas.activeInHierarchy && !homeMenuCanvas.activeInHierarchy && !levelCanvas.activeInHierarchy && !replayCanvas.activeInHierarchy && !gameOverCanvas.activeInHierarchy && !allBulbsFilled)
         {
             if (!timerIsRunning)
             {
                 timerIsRunning = true;
             }
             Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            int row = Mathf.FloorToInt(mousePos.y);
-            int col = Mathf.FloorToInt(mousePos.x);
+
+            // Calculate the bottom-left position of the grid
+            float centerX = (lvlData.col - 1) * gridPadding * 0.5f;
+            float centerY = (lvlData.row - 1) * gridPadding * 0.5f;
+
+            // Adjust the mouse position based on the new grid start position
+            int col = Mathf.RoundToInt((mousePos.x + centerX) / gridPadding) - lvlData.col / 2;
+            int row = Mathf.RoundToInt((mousePos.y + centerY) / gridPadding) - lvlData.row / 2;
+
+            //Debug.Log("Row: "+row+" Column: "+col);
+
             if (row < 0 || col < 0) return;
             if (row >= lvlData.row) return;
             if (col >= lvlData.col) return;
@@ -116,12 +150,19 @@ public class Manager : MonoBehaviour
         {
             timerIsRunning = false;
         }
+    }
 
-        if (gameOver)
+    private void GameOver()
+    {
+        gameOverCanvas.SetActive(true);
+
+        if(currentLevel > completedLevels)
         {
-            gameOverCanvas.SetActive(true);
-        }
+            _APIManager.UpdateGameScore(ggScore, _APIManager.ggCoins, "loss", currentLevel);
 
+            GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (currentLevel).ToString(), "Score_", 0);
+            GameAnalytics.NewProgressionEvent(GAProgressionStatus.Fail, "Level_" + (currentLevel).ToString(), "Time_", (int)timeElapsed);
+        }
     }
 
     public void DisplayTime(float timeToDisplay)
@@ -134,10 +175,28 @@ public class Manager : MonoBehaviour
     {
         lvlIndex = _lvlIndex;
 
-        if (completedLevels[lvlIndex] == true)
+        timeElapsed = totalGameTime;
+
+        playerScore = PlayerPrefs.GetInt("PlayerScore");
+        completedLevels = PlayerPrefs.GetInt("CompletedLevels");
+
+        if(!PlayerPrefs.HasKey("currentLevel"))
+        {
+            PlayerPrefs.SetInt("currentLevel", 1);
+        }
+        else
+        {
+            PlayerPrefs.SetInt("currentLevel", _lvlIndex + 1);
+        }
+
+        currentLevel = PlayerPrefs.GetInt("currentLevel");
+
+        if (currentLevel <= completedLevels)
         {
             replayCanvas.SetActive(true);
         }
+
+        ScoreUpdate();
 
         if (props != null)
         {
@@ -151,30 +210,18 @@ public class Manager : MonoBehaviour
             startPropsList.Clear();
         }
 
-        if (lvlIndex >= levelsData.Count)
-        {
-            return;
-        }
-
         lvlData = levelsData[lvlIndex];
+
         startPropsList.Clear();
         SpawnCell();
-        timeElapsed = TotalGameTime;
-        LevelNumber.text = "Level " + (lvlIndex + 1).ToString();
+
+        LevelNumber.text = "Level " + (currentLevel).ToString();
 
         timerIsRunning = true;
 
-        GameAnalytics.NewProgressionEvent(GAProgressionStatus.Start, "Level_" + (lvlIndex + 1).ToString());
+        GameAnalytics.NewProgressionEvent(GAProgressionStatus.Start, "Level_" + (currentLevel).ToString());
 
-        _APIManager.StartGame();
-    }
-
-    public void ResetGameOver()
-    {
-        if (gameOver)
-        {
-            gameOver = false;
-        }
+        Debug.Log("\n" + "Player Score: " + playerScore + "\n" + "Current Level: " + currentLevel + "\n" + "Completed Levels: " + completedLevels + "\n");
     }
 
     [DllImport("__Internal")]
@@ -184,33 +231,9 @@ public class Manager : MonoBehaviour
     {
         //webgl pc
         //SceneManager.LoadScene("MainMenu");
+
         //webgl android ios
         GoToURLInSameTab("https://platform.grandgaming.com/");
-    }
-
-    public void LoadNextLevel()
-    {
-        if (lvlIndex == (levelsData.Count - 1))
-        {
-            homeMenuCanvas.SetActive(true);
-            return;
-        }
-
-        for (int i = 0; i < lvlData.row; i++)
-        {
-            for (int j = 0; j < lvlData.col; j++)
-            {
-                Destroy(props[i, j].gameObject);
-            }
-        }
-
-        lvlIndex++;
-        startPropsList.Clear();
-        timeElapsed = TotalGameTime;
-
-        LoadLevel(lvlIndex);
-
-        LevelNumber.text = "Level " + (lvlIndex + 1).ToString();
     }
 
     public void RestartLevel()
@@ -224,7 +247,7 @@ public class Manager : MonoBehaviour
         }
         startPropsList.Clear();
 
-        timeElapsed = TotalGameTime;
+        timeElapsed = totalGameTime;
         LoadLevel(lvlIndex);
         LevelNumber.text = "Level " + (lvlIndex + 1).ToString();
     }
@@ -232,14 +255,16 @@ public class Manager : MonoBehaviour
     public void SpawnCell()
     {
         props = new PropScript[lvlData.row, lvlData.col];
+
         for (int i = 0; i < lvlData.row; i++)
         {
             for (int j = 0; j < lvlData.col; j++)
             {
                 PropScript tempProp = Instantiate(propPrefab);
-                tempProp.transform.position = new Vector2(j + 0.5f, i + 0.5f);
+                tempProp.transform.position = new Vector2(j * gridPadding, i * gridPadding);
                 tempProp.Initialize(lvlData.propType[i * lvlData.col + j]);
                 props[i, j] = tempProp;
+
                 if (tempProp._propType == 1)
                 {
                     startPropsList.Add(tempProp);
@@ -247,15 +272,20 @@ public class Manager : MonoBehaviour
             }
         }
 
+        // Compute the exact center of the grid
+        float centerX = ((lvlData.col - 1) * gridPadding) / 2.0f;
+        float centerY = ((lvlData.row - 1) * gridPadding) / 2.0f;
+
+        // Set camera position to center the grid
+        Camera.main.transform.position = new Vector3(centerX, centerY, -10f);
+
+        // Compute orthographic size based on the grid dimensions
         float aspectRatio = (float)Screen.width / Screen.height;
+        float verticalSize = ((lvlData.row) * gridPadding) / 2.0f + 1f;
+        float horizontalSize = ((lvlData.col) * gridPadding) / aspectRatio / 2.0f + 1f;
 
-        Camera.main.orthographicSize = Mathf.Max(lvlData.row, lvlData.col / aspectRatio) * 0.5f + 1f;
-
-        Vector3 cameraPos = Camera.main.transform.position;
-        cameraPos.x = (lvlData.col - 1) * gridPadding * 0.5f;
-        cameraPos.y = (lvlData.row - 1) * gridPadding * 0.5f;
-
-        Camera.main.transform.position = cameraPos;
+        // Ensure the camera fits both dimensions
+        Camera.main.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
 
         StartCoroutine(CheckRoutine());
     }
@@ -288,7 +318,7 @@ public class Manager : MonoBehaviour
             toCheck.Enqueue(prop);
         }
 
-        bool bulbReached = false;//new
+        bool bulbReached = false;
 
         while (toCheck.Count > 0)
         {
@@ -299,17 +329,17 @@ public class Manager : MonoBehaviour
             {
                 if (!checkedFilled.Contains(_prop))
                 {
-                    if (_prop._propType == 6) // Assuming propType 6 is bulb
+                    if (_prop._propType == 6) //propType 6 is bulb
                     {
                         bulbReached = true;
-                    }//new
+                    }
 
                     toCheck.Enqueue(_prop);
                 }
             }
         }
 
-        if (bulbReached)//new
+        if (bulbReached)
         {
             foreach (var prop in checkedFilled)
             {
@@ -355,136 +385,128 @@ public class Manager : MonoBehaviour
 
         if (allBulbsFilled)
         {
-            CompleteLevel();
+            timerIsRunning = false;
 
             StartCoroutine(WaitingTime());
-            //Debug.Log("Game Won! All bulbs are filled.");
         }
-        else
-        {
-            //Debug.Log("Not all bulbs are filled.");
-        }
-    }
-
-    private void CompleteLevel()
-    {
-        float timeUsed = 500f - timeElapsed;
-        timerIsRunning = false;
-
-        if (completedLevels[lvlIndex] == false)
-        {
-            // Determine score based on time
-            if (timeUsed <= timeThresholds[0])
-            {
-                playerScore += score[2]; // Highest score for quickest completion
-                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
-                _APIManager.UpdateGameScore(score[2], "win", lvlIndex + 1);
-
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[2]);
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
-            }
-            else if (timeUsed <= timeThresholds[1])
-            {
-                playerScore += score[1]; // Mid score for medium speed completion
-                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
-                _APIManager.UpdateGameScore(score[1], "win", lvlIndex + 1);
-
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[1]);
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
-            }
-            else
-            {
-                playerScore += score[0]; // Lowest score for slow completion
-                _APIManager.coinsEarningLevelBased((lvlIndex + 1));
-                _APIManager.UpdateGameScore(score[0], "win", lvlIndex + 1);
-
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Score", score[0]);
-                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + (lvlIndex + 1).ToString(), "Time", (int)timeElapsed);
-            }
-
-            if ((lvlIndex + 1) % GrandAdManager.instance.adsAfter == 0)
-            {
-                Debug.Log(lvlIndex + 1);
-                GrandAdManager.instance.ShowAd("startAd");
-            }
-            ScoreUpdate();
-        }
-
-        if (completedLevels[lvlIndex] == false)
-        {
-            completedLevels[lvlIndex] = true;
-        }
-
-        if (completedLevels[completedLevels.Length - 1] == true)
-        {
-            allLevelsDone = true;
-        }
-
-        if (lvlIndex < (levelsData.Count - 1))
-        {
-            levelButtons[lvlIndex + 1].interactable = true;
-        }
-
-        if (lvlIndex < levelsData.Count)
-        {
-            levelButtons[lvlIndex].image.sprite = lvlCompletedIcon;
-        }
-
-        /*if (lvlIndex < levelsData.Count)
-        {
-            levelButtons[lvlIndex].interactable = false;
-
-            SpriteState spriteState = levelButtons[lvlIndex].spriteState;
-            spriteState.disabledSprite = lvlCompletedIcon;
-            levelButtons[lvlIndex].spriteState = spriteState;
-
-            levelButtons[lvlIndex].image.sprite = lvlCompletedIcon;
-        }*/
-    }
-
-    private void ScoreUpdate()
-    {
-        scoreText[0].text = "Score: " + playerScore;
-        scoreText[1].text = "Score: " + playerScore;
     }
 
     IEnumerator WaitingTime()
     {
-        yield return new WaitForSeconds(2);
+        Debug.Log("Waiting");
 
-        nextLevelCanvas.SetActive(true);
+        yield return new WaitForSeconds(1);
 
-        /*if (!allLevelsDone)
+        Debug.Log("Waiting over");
+
+        //Game completed screen
+        if (currentLevel == 10)
         {
-
+            Debug.Log("Current level: " + currentLevel + " (inside if)");
+            gameCompletedCanvas.SetActive(true);
         }
         else
         {
-            AllLevelCompleted();
-        }*/
-    }
+            Debug.Log("Current level: " + currentLevel + " (inside else)");
 
-    public void AllLevelCompleted()
-    {
-        gameCompletedCanvas.SetActive(true);
-    }
+            nextLevelCanvas.SetActive(true);
 
-    public void PlayAgain()
-    {
-
-        allLevelsDone = false;
-
-        for (int i = 0; i < completedLevels.Length; i++)
-        {
-            completedLevels[i] = false;
+            GGCoinsSetup();
         }
 
-        /*foreach (UnityEngine.UI.Button levelButton in levelButtons)
+        CompleteLevel();
+    }
+
+    private void CompleteLevel()
+    {
+        float timeUsed = totalGameTime - timeElapsed;
+        
+        if(currentLevel > completedLevels)
         {
-            SpriteState spriteState = levelButton.spriteState;
-            spriteState.disabledSprite = lvlLockedIcon;
-            levelButton.spriteState = spriteState;
-        }*/
+            _APIManager.coinsEarningLevelBased(currentLevel, _GGCoinText);
+
+            PlayerPrefs.SetInt("CompletedLevels", completedLevels + 1);
+            Debug.Log("Number of completed level : " + PlayerPrefs.GetInt("CompletedLevels") + " (After update)");
+
+            // Determine score based on time
+            if (timeUsed <= timeThresholds[0])
+            {
+                playerScore += score[2]; // Highest score for quickest completion
+                ggScore += score[2];
+
+                PlayerPrefs.SetInt("PlayerScore",playerScore);
+
+                _APIManager.UpdateGameScore(ggScore, _APIManager.ggCoins, "win", currentLevel);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Score", score[2]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Time", (int)timeElapsed);
+            }
+            else if (timeUsed <= timeThresholds[1])
+            {
+                playerScore += score[1]; // Mid score for medium speed completion
+                ggScore += score[1];
+                PlayerPrefs.SetInt("PlayerScore", playerScore);
+
+                _APIManager.UpdateGameScore(ggScore, _APIManager.ggCoins, "win", currentLevel);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Score", score[1]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Time", (int)timeElapsed);
+            }
+            else
+            {
+                playerScore += score[0]; // Lowest score for slow completion
+                ggScore += score[0];
+                PlayerPrefs.SetInt("PlayerScore", playerScore);
+
+                _APIManager.UpdateGameScore(ggScore, _APIManager.ggCoins, "win", currentLevel);
+
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Score", score[0]);
+                GameAnalytics.NewProgressionEvent(GAProgressionStatus.Complete, "Level_" + currentLevel.ToString(), "Time", (int)timeElapsed);
+            }
+            ScoreUpdate();
+
+            levelButtons[lvlIndex].image.sprite = lvlCompletedIcon;
+            if (levelButtons[lvlIndex + 1] != null)
+            {
+                levelButtons[lvlIndex + 1].interactable = true;
+                levelButtons[lvlIndex + 1].GetComponentInChildren<Transform>().GetChild(0).gameObject.SetActive(true);
+            }
+        }
+
+        if (currentLevel % GrandAdManager.instance.adsAfter == 0)
+        {
+            Debug.Log(currentLevel);
+            GrandAdManager.instance.ShowAd("startAd");
+        }
+    }
+
+    private void ScoreUpdate()
+    {
+        for(int i = 0; i < scoreText.Length; i++)
+        {
+            scoreText[i].text = "Score: " + playerScore;
+        }
+    }
+
+    private void GGCoinsSetup()
+    {
+        if (_GGCoinText == null)
+        {
+            _GGCoinText = GameObject.FindGameObjectWithTag("GGCoinText");
+        }
+
+        if (_GGCoinText != null)
+        {
+            if (_GGCoinText.gameObject.activeSelf)
+            {
+                _GGCoinText.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    public void ResetGame()
+    {
+        PlayerPrefs.DeleteAll();
 
         levelButtons[0].image.sprite = lvlIncompleteBtn;
         levelButtons[0].interactable = true;
@@ -495,12 +517,20 @@ public class Manager : MonoBehaviour
 
             levelButtons[i].interactable = false;
 
+            levelButtons[i].GetComponentInChildren<Transform>().GetChild(0).gameObject.SetActive(false);
+
             SpriteState spriteState = levelButtons[i].spriteState;
             spriteState.disabledSprite = lvlLockedIcon;
             levelButtons[i].spriteState = spriteState;
         }
 
         playerScore = 0;
+        ggScore = 0;
+
         ScoreUpdate();
+
+        _APIManager.StartGame();
+
+        homeMenuCanvas.SetActive(true);
     }
 }

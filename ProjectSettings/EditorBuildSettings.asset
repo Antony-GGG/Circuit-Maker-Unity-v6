@@ -9,3 +9,4 @@ EditorBuildSettings:
     path: Assets/New Files/Scene/NewCircuit2D.unity
     guid: 8e3e58d8daccd3f42ac0947f1add268a
   m_configObjects: {}
+  m_UseUCBPForAssetBundles: 0
