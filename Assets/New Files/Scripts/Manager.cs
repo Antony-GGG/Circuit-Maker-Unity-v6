@@ -53,6 +53,7 @@ public class Manager : MonoBehaviour
     private bool timerIsRunning = false;
     [SerializeField]private TextMeshProUGUI timerText;
     [SerializeField]private TextMeshProUGUI[] scoreText;
+    [SerializeField] TextMeshProUGUI GGCoinsText;
     private int playerScore;
     private int[] score = { 100, 200, 300 };
     private float[] timeThresholds = { 50f, 100f };
@@ -485,6 +486,11 @@ public class Manager : MonoBehaviour
         for(int i = 0; i < scoreText.Length; i++)
         {
             scoreText[i].text = "Score: " + playerScore;
+        }
+        
+        if(GGCoinsText != null && GGCoinsText.IsActive())
+        {
+            GGCoinsText.text = "GG Coins: " + _APIManager.ggCoins;
         }
     }
 
